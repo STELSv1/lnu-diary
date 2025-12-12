@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Вхід | LNU Diary</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body class="login-page">
+    <div class="login-card">
+        <h2>LNU ELECTRONIC DIARY</h2>
+        <p>Система обліку успішності</p>
+
+        <a href="/auth/microsoft" class="btn-microsoft">
+            Увійти через LNU пошту
+        </a>
+
+        <div style="border-top: 1px solid #333; margin: 20px 0;"></div>
+
+        <div class="manual-toggle" onclick="document.getElementById('mForm').style.display='block'">
+            Вхід для адміністратора / Ручний вхід
+        </div>
+
+        <form action="/auth/login" method="POST" class="manual-form" id="mForm" style="display: block;">
+            
+            <% if (typeof error !== 'undefined' && error && error.length > 0) { %>
+                <div class="error-message">
+                    <%= error %>
+                </div>
+            <% } %>
+
+            <input type="email" name="email" placeholder="Email" required 
+                   class="<%= (typeof error !== 'undefined' && error && error.length > 0) ? 'input-error' : '' %>">
+            
+            <input type="password" name="password" placeholder="Пароль" required
+                   class="<%= (typeof error !== 'undefined' && error && error.length > 0) ? 'input-error' : '' %>">
+            
+            <button type="submit">Увійти</button>
+        </form>
+    </div>
+</body>
+</html>

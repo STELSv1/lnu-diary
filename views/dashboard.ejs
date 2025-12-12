@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard | LNU Diary</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <% 
+        const safeSubjects = (typeof subjects !== 'undefined') ? subjects : [];
+        const safeUser = (typeof user !== 'undefined') ? user : { name: 'Гість', email: '' };
+        const safeSubgroup = (typeof userSubgroup !== 'undefined') ? userSubgroup : 1;
+        const safeSummary = (typeof summary !== 'undefined') ? summary : [];
+        const safeTasks = (typeof tasks !== 'undefined') ? tasks : [];
+        const safeSchedule = (typeof schedule !== 'undefined') ? schedule : [];
+        let activeTab = (typeof currentTab !== 'undefined') ? currentTab : 'grades';
+    %>
+
+    <header>
+        <div style="font-weight:bold; font-size:1.2em; color: #00ffcc;">
+            <i class="fas fa-graduation-cap"></i> LNU Diary
+        </div>
+        <div>
+            <span><%= safeUser.name || safeUser.email %></span>
+            <a href="/auth/logout" style="color:#ff5555; margin-left:15px; font-weight: bold;">
+                <i class="fas fa-sign-out-alt"></i> Вихід
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+        
+        <div class="tabs-nav">
+            <button id="btn-grades" class="tab-btn" onclick="openTab('grades')">
+                <i class="fas fa-chart-bar"></i> Оцінки
+            </button>
+            <button id="btn-planner" class="tab-btn" onclick="openTab('planner')">
+                <i class="fas fa-tasks"></i> Планувальник
+            </button>
+            <button id="btn-schedule" class="tab-btn" onclick="openTab('schedule')">
+                <i class="far fa-calendar-alt"></i> Розклад
+            </button>
+        </div>
+
+        <!-- === ВКЛАДКА 1: ОЦІНКИ (AJAX) === -->
+        <div id="tab-grades" class="tab-content">
+            
+            <!-- AJAX SELECT -->
+            <select class="subject-select" onchange="fetchGrades(this.value)">
+                <option value="all">Загальний підсумок</option>
+                <% safeSubjects.forEach(sub => { %>
+                    <option value="<%= sub.id %>"><%= sub.name %></option>
+                <% }) %>
+            </select>
+
+            <!-- Контейнер для таблиці підсумків -->
+            <div id="grades-summary-view" style="display: block;">
+                <table class="main-table">
+                    <thead>
+                        <tr><th>Предмет</th><th>Лаби</th><th>Модулі</th><th>Екзамен/Залік</th><th>Підсумок</th></tr>
+                    </thead>
+                    <tbody id="summary-body">
+                        <% if (safeSummary.length > 0) { %>
+                            <% safeSummary.forEach(row => { 
+                                let color = '#fff';
+                                if (row.total >= 90) color = '#00ffcc'; 
+                                else if (row.total >= 60) color = '#ffcc00'; 
+                                else if (row.total > 0) color = '#ff5555'; 
+                            %>
+                                <tr>
+                                    <td style="text-align:left; font-weight:bold"><%= row.subject_name %></td>
+                                    <td><%= row.labs %></td>
+                                    <td><%= row.modules %></td>
+                                    <td><%= row.has_exam ? row.exam : '-' %></td>
+                                    <td style="font-weight:bold; font-size:1.1em; color: <%= color %>"><%= row.total %></td>
+                                </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="5" style="color:#666; padding:20px;">Оцінок немає</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Контейнер для детального вигляду (спочатку прихований) -->
+            <div id="grades-detail-view" style="display: none;">
+                <div class="details-grid">
+                    <div class="col" id="col-labs">
+                        <h3>Лабораторні</h3>
+                        <div class="list"></div>
+                        <div class="footer">Сума: 0</div>
+                    </div>
+                    <div class="col" id="col-modules">
+                        <h3>Модулі</h3>
+                        <div class="list"></div>
+                        <div class="footer">Сума: 0</div>
+                    </div>
+                    <div class="col" id="col-exam">
+                        <h3>Екзамен / Підсумок</h3>
+                        <div class="list"></div>
+                        <div class="footer">Фінал: 0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- === ВКЛАДКА 2: ПЛАНУВАЛЬНИК === -->
+        <div id="tab-planner" class="tab-content">
+            <div style="background: #1e1e1e; padding: 20px; border-radius: 8px; border: 1px solid #333;">
+                <form id="addTaskForm" style="display:flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <input type="text" name="text" id="taskText" placeholder="Що треба зробити?" required style="flex-grow:1; padding:10px; border-radius:4px; border:1px solid #444; background:#222; color:white;">
+                    <input type="datetime-local" name="deadline" id="taskDeadline" required style="padding:10px; border-radius:4px; border:1px solid #444; background:#222; color:white;">
+                    <button type="submit" style="background:#00ffcc; color:black; font-weight:bold; border:none; padding:10px 20px; cursor:pointer; border-radius:4px;">Додати</button>
+                </form>
+
+                <div id="taskList" class="task-list">
+                    <% if (safeTasks.length > 0) { %>
+                        <% safeTasks.forEach(task => { 
+                            let dateStr = '';
+                            if (task.deadline) {
+                                const d = new Date(task.deadline);
+                                dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                            }
+                        %>
+                            <div id="task-<%= task.id %>" style="display:flex; justify-content:space-between; align-items:center; background:#252525; padding:10px; margin-bottom:8px; border-radius:4px; border-left: 3px solid <%= task.is_done ? '#28a745' : '#ffcc00' %>; transition: all 0.3s;">
+                                <div class="task-content" style="<%= task.is_done ? 'text-decoration:line-through; color:#777;' : '' %>">
+                                    <span style="font-weight:bold;"><%= task.text %></span>
+                                    <% if (dateStr) { %>
+                                        <span style="color:#888; font-size:0.8em; margin-left:10px;"><i class="far fa-clock"></i> <%= dateStr %></span>
+                                    <% } %>
+                                </div>
+                                <div>
+                                    <button onclick="toggleTask(<%= task.id %>)" style="background:none; border:none; cursor:pointer; color:#00ffcc; font-size:1.2em;"><i class="<%= task.is_done ? 'fas fa-check-circle' : 'far fa-circle' %>" id="icon-<%= task.id %>"></i></button>
+                                    <button onclick="deleteTask(<%= task.id %>)" style="background:none; border:none; cursor:pointer; color:#ff5555; font-size:1.2em;"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        <% }) %>
+                    <% } else { %>
+                        <p id="noTasksMsg" style="text-align:center; color:#666;">Завдань немає.</p>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+
+        <!-- === ВКЛАДКА 3: РОЗКЛАД === -->
+        <div id="tab-schedule" class="tab-content">
+            <div style="margin-bottom: 20px; display:flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin:0; color:#00ffcc;">Розклад занять</h3>
+                <form action="/set-subgroup" method="POST" style="display:inline;">
+                    <select name="subgroup" onchange="this.form.submit()" style="padding:5px; background:#333; color:white; border:1px solid #555; border-radius:4px;">
+                        <option value="1" <%= safeSubgroup === 1 ? 'selected' : '' %>>Підгрупа 1</option>
+                        <option value="2" <%= safeSubgroup === 2 ? 'selected' : '' %>>Підгрупа 2</option>
+                    </select>
+                </form>
+            </div>
+
+            <div class="schedule-container" style="background: #1e1e1e; padding: 20px; border-radius: 8px; border: 1px solid #333;">
+                <% if (safeSchedule.length > 0) { %>
+                    <% 
+                        let currentDay = '';
+                        safeSchedule.forEach(lesson => { 
+                            if (currentDay !== lesson.day_name) {
+                                currentDay = lesson.day_name;
+                    %>
+                        <div style="background:#2f2f2f; color:#00ffcc; padding:8px; font-weight:bold; margin-top:15px; border-radius:4px;">
+                            <%= currentDay %>
+                        </div>
+                    <% } %>
+                        <div style="display:flex; padding:10px 0; border-bottom:1px dashed #444;">
+                            <div style="width:60px; color:#888; font-family:monospace;"><%= lesson.time_start %></div>
+                            <div style="flex-grow:1;">
+                                <div style="color:white;"><%= lesson.subject %></div>
+                                <div style="color:#666; font-size:0.9em;">Пара <%= lesson.lesson_num %></div>
+                            </div>
+                            <div style="color:#ffcc00; font-weight:bold;"><%= lesson.room %></div>
+                        </div>
+                    <% }) %>
+                <% } else { %>
+                    <p style="text-align:center; color:#666;">Розклад порожній. Перевірте базу даних.</p>
+                <% } %>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- JS ЛОГІКА -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dateInput = document.getElementById('taskDeadline');
+            if (dateInput) {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                dateInput.min = now.toISOString().slice(0, 16);
+            }
+            openTab('<%= activeTab %>');
+        });
+
+        // 1. ПЕРЕМИКАННЯ ВКЛАДОК
+        function openTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(div => div.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const target = document.getElementById('tab-' + tabName);
+            const btn = document.getElementById('btn-' + tabName);
+            if (target) target.style.display = 'block';
+            if (btn) btn.classList.add('active');
+            const url = new URL(window.location);
+            url.searchParams.set('tab', tabName);
+            window.history.replaceState({}, '', url);
+        }
+
+        // 2. AJAX: ОТРИМАННЯ ОЦІНОК (БЕЗ ПЕРЕЗАВАНТАЖЕННЯ)
+        async function fetchGrades(subjectId) {
+            try {
+                const response = await fetch(`/api/grades?subject_id=${subjectId}`);
+                const result = await response.json();
+
+                const summaryView = document.getElementById('grades-summary-view');
+                const detailView = document.getElementById('grades-detail-view');
+
+                // Функція для запуску анімації
+                const triggerFade = (element) => {
+                    element.style.animation = 'none';
+                    element.offsetHeight; // trigger reflow (перезапуск анімації)
+                    element.style.animation = 'fadeIn 0.5s ease-in-out';
+                };
+
+                if (result.mode === 'summary') {
+                    // Показуємо загальну таблицю
+                    summaryView.style.display = 'block';
+                    detailView.style.display = 'none';
+                    
+                    // Генеруємо рядки таблиці
+                    let html = '';
+                    if (result.data.length === 0) {
+                        html = '<tr><td colspan="5" style="color:#666; padding:20px;">Оцінок немає</td></tr>';
+                    } else {
+                        result.data.forEach(row => {
+                            let color = '#fff';
+                            if (row.total >= 90) color = '#00ffcc';
+                            else if (row.total >= 60) color = '#ffcc00';
+                            else if (row.total > 0) color = '#ff5555';
+
+                            html += `
+                                <tr>
+                                    <td style="text-align:left; font-weight:bold">${row.subject_name}</td>
+                                    <td>${row.labs}</td>
+                                    <td>${row.modules}</td>
+                                    <td>${row.has_exam ? row.exam : '-'}</td>
+                                    <td style="font-weight:bold; font-size:1.1em; color: ${color}">${row.total}</td>
+                                </tr>
+                            `;
+                        });
+                    }
+                    document.getElementById('summary-body').innerHTML = html;
+                    triggerFade(summaryView); // Анімація появи
+
+                } else {
+                    // Показуємо детальний вигляд
+                    summaryView.style.display = 'none';
+                    detailView.style.display = 'block';
+
+                    const d = result.data;
+
+                    // Допоміжна функція для генерації списку
+                    const renderList = (items, defaultName) => {
+                        return items.map(i => `<div class="row"><span>${i.name || defaultName}</span> <span>${i.score}</span></div>`).join('');
+                    };
+
+                    // Оновлюємо колонку Лаб
+                    const labCol = document.getElementById('col-labs');
+                    labCol.querySelector('.list').innerHTML = renderList(d.labs, 'Лабораторна');
+                    labCol.querySelector('.footer').innerText = `Сума: ${d.labsSum}`;
+
+                    // Оновлюємо колонку Модулів
+                    const modCol = document.getElementById('col-modules');
+                    modCol.querySelector('.list').innerHTML = renderList(d.modules, 'Модуль');
+                    modCol.querySelector('.footer').innerText = `Сума: ${d.modulesSum}`;
+
+                    // Оновлюємо колонку Екзаменів
+                    const examCol = document.getElementById('col-exam');
+                    let examHtml = renderList(d.exam, 'Екзамен');
+                    examHtml += `<br><div class="row" style="color:#00ffcc"><span>Всього</span> <span>${d.totalSum}</span></div>`;
+                    examCol.querySelector('.list').innerHTML = examHtml;
+                    examCol.querySelector('.footer').innerText = `Фінал: ${d.totalSum}`;
+
+                    triggerFade(detailView); // Анімація появи
+                }
+
+            } catch (err) {
+                console.error("Помилка завантаження оцінок:", err);
+            }
+        }
+
+        // 3. AJAX: ЗАВДАННЯ
+        const addForm = document.getElementById('addTaskForm');
+        if (addForm) {
+            addForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const text = document.getElementById('taskText').value;
+                const deadline = document.getElementById('taskDeadline').value;
+                try {
+                    const response = await fetch('/tasks/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, deadline })
+                    });
+                    const data = await response.json();
+                    if (data.error) {
+                        alert(data.error);
+                    } else if (data.success) {
+                        document.getElementById('taskText').value = '';
+                        const noTasks = document.getElementById('noTasksMsg');
+                        if (noTasks) noTasks.style.display = 'none';
+                        let dateHtml = '';
+                        if (data.task.deadline) {
+                            const d = new Date(data.task.deadline);
+                            const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                            dateHtml = `<span style="color:#888; font-size:0.8em; margin-left:10px;"><i class="far fa-clock"></i> ${dateStr}</span>`;
+                        }
+                        const newTaskHtml = `<div id="task-${data.task.id}" style="display:flex; justify-content:space-between; align-items:center; background:#252525; padding:10px; margin-bottom:8px; border-radius:4px; border-left: 3px solid #ffcc00; transition: all 0.3s; animation: fadeIn 0.5s;">
+                                <div class="task-content"><span style="font-weight:bold;">${data.task.text}</span>${dateHtml}</div>
+                                <div><button onclick="toggleTask(${data.task.id})" style="background:none; border:none; cursor:pointer; color:#00ffcc; font-size:1.2em;"><i class="far fa-circle" id="icon-${data.task.id}"></i></button>
+                                <button onclick="deleteTask(${data.task.id})" style="background:none; border:none; cursor:pointer; color:#ff5555; font-size:1.2em;"><i class="fas fa-trash"></i></button></div></div>`;
+                        document.getElementById('taskList').insertAdjacentHTML('beforeend', newTaskHtml);
+                    }
+                } catch (err) { console.error('Error:', err); }
+            });
+        }
+
+        async function deleteTask(id) {
+            try {
+                const response = await fetch('/tasks/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const el = document.getElementById('task-' + id);
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 300);
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function toggleTask(id) {
+            try {
+                const response = await fetch('/tasks/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const taskDiv = document.getElementById('task-' + id);
+                    const icon = document.getElementById('icon-' + id);
+                    const content = taskDiv.querySelector('.task-content');
+                    const isDone = icon.classList.contains('fa-check-circle');
+                    if (!isDone) {
+                        icon.classList.remove('far', 'fa-circle');
+                        icon.classList.add('fas', 'fa-check-circle');
+                        taskDiv.style.borderLeftColor = '#28a745';
+                        content.style.textDecoration = 'line-through';
+                        content.style.color = '#777';
+                    } else {
+                        icon.classList.remove('fas', 'fa-check-circle');
+                        icon.classList.add('far', 'fa-circle');
+                        taskDiv.style.borderLeftColor = '#ffcc00';
+                        content.style.textDecoration = 'none';
+                        content.style.color = 'inherit';
+                    }
+                }
+            } catch (err) { console.error(err); }
+        }
+    </script>
+</body>
+</html>
